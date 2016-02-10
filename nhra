@@ -159,6 +159,6 @@ if __name__ == '__main__':
     if firstrun() == True:
         load_config(gc) ### if firstrun, reload config
     db_setup()
-    app.debug = True
+    app.debug = False
     log('Starting up Nagios Host RESTful API (NHRA)...', '003')
     app.run(host='0.0.0.0', port=5000)

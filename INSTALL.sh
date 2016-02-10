@@ -29,6 +29,7 @@ cp nhra.service /usr/lib/systemd/system/.
 cp templates $DIR/.
 cp LICENSE $DIR/.
 cp README.md $DIR/.
+touch /var/log/nhra.log
 
 echo 'Enabling services...'
 systemctl daemon-reload
