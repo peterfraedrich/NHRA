@@ -130,7 +130,7 @@ address             %s
 """ % (i['hostname'], i['alias'], i['ip'])
         f.write(t)
     f.close()
-    log('Updated the nagios hosts file with 'str(servers.count()) + ' hosts.', '200')
+    log('Updated the nagios hosts file with ' + str(servers.count()) + ' hosts.', '200')
     sub.call('systemctl restart nagios', shell=True)
     sub.call('systemctl restart httpd', shell=True)
     return
