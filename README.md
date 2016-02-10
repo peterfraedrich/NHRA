@@ -42,7 +42,7 @@ Each server, on first-run, generates an 8-character key based on an UUID. This i
 ### Examples
 
 To add a host:
-```C++
+```bash
 Server to add:              172.16.10.1
 FQDN:                       app1.hexapp.net
 Alias:                      APP_1
@@ -54,7 +54,7 @@ $> curl http://nagios.hexapp.net:5000/add?key=abcd1234&ip=172.16.10.1&hostname=a
 ```
 
 To remove a host:
-```C++
+```bash
 FQDN to remove:             oldDB.hexapp.net
 API Key:                    abcd1234
 
@@ -68,5 +68,5 @@ None?
 
 ### Acknowledgements
 `NHRA` uses some pretty cool open-source software:
-* `pymongo` (Apache)[http://choosealicense.com/licenses/apache-2.0/] -- https://github.com/mongodb/mongo-python-driver
-* `flask` (BSD)[http://choosealicense.com/licenses/isc/] -- http://flask.pocoo.org/
+* `pymongo` ([Apache])(http://choosealicense.com/licenses/apache-2.0/) -- https://github.com/mongodb/mongo-python-driver
+* `flask` ([BSD])(http://choosealicense.com/licenses/isc/) -- http://flask.pocoo.org/
