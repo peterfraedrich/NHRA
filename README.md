@@ -32,6 +32,7 @@ As of right now there are only 2 API hooks:
 ```c++
 /add                        // adds a host to the config
 /remove                     // removes a host from the config
+/refresh                    // manually dumps the database to the hosts.cfg file
 ```
 
 ### API Key
