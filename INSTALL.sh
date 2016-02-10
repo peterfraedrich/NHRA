@@ -22,6 +22,7 @@ yum install -y python-pip mongodb mongodb-server
 pip install flask pymongo
 
 echo 'Configuring...'
+mkdir $DIR
 cp nhra $DIR/.
 cp nhra.conf $DIR/.
 cp nhra.service /usr/lib/systemd/system/.
