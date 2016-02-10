@@ -1,0 +1,164 @@
+#!/usr/bin/python
+
+from os import path
+from os import rename
+from datetime import datetime as dt
+import unicodedata
+import json
+from pymongo import MongoClient
+import ConfigParser
+import argparse
+from flask import Flask
+from flask import request
+import uuid
+import subprocess as sub
+import shutil
+
+app = Flask(__name__)
+gc = {}
+
+def ts():
+    return dt.now().strftime('%Y%m%d%H%M%S%f')
+
+def load_config(gc):
+    config = ConfigParser.ConfigParser(allow_no_value=True)
+    config.read('/etc/nhra/nhra.conf')
+    gc['db'] = {}
+    gc['db']['db_url'] = config.get('database', 'db_url')
+    gc['db']['db_name'] = config.get('database', 'db_name')
+    gc['db']['db_port'] = config.get('database', 'db_port')
+    gc['logfile'] = config.get('general', 'logfile')
+    gc['firstrun'] = config.get('general', 'firstrun')
+    gc['api_key'] = config.get('general', 'api_key')
+    gc['templates'] = config.get('nagios', 'templates')
+    gc['hosts_file'] = config.get('nagios', 'hosts')
+    log('Completed loading config from nhra.conf', '001')
+    return gc
+
+def firstrun():
+    if gc['firstrun'] == '1' or gc['firstrun'] == 1:
+        f = open(gc['logfile'], 'w')
+        f.write(dt.now().strftime('%Y/%m/%d %H:%M:%S:%f :: ') + '000' + ' :: Initialized the log file.\n')
+        f.close()
+        key = str(uuid.uuid4())[-8:]
+        fr = ConfigParser.ConfigParser()
+        fr.read('/etc/nhra/nhra.conf')
+        fr.set('general', 'firstrun', '0')
+        fr.set('general', 'api_key', key)
+        with open('/etc/nhra/nhra.conf', 'wb') as config_file:
+            fr.write(config_file)
+        return True
+    else:
+        return False
+
+def db_setup():
+    global db
+    client = MongoClient(str('mongodb://' + gc['db']['db_url'] + ':' + gc['db']['db_port']))
+    db_a = client[gc['db']['db_name']]
+    db = db_a['nagios_hosts']
+    log('Completed DB setup', '002')
+
+def log(msg, code, err=' '):
+    # first run
+    if gc['firstrun'] == 1 or gc['firstrun'] == '1':
+        f = open(gc['logfile'], 'w')
+        f.write(dt.now().strftime('%Y/%m/%d %H:%M:%S:%f :: ') + '000' + ' :: Initialized the log file.\n')
+        f.close()
+        fr = ConfigParser.ConfigParser()
+        fr.read('/etc/nhra/nhra.conf')
+        fr.set('general', 'firstrun', '0')
+        with open('/etc/nhra/nhra.conf', 'wb') as config_file:
+            fr.write(config_file)
+    # log rotate
+    if path.getsize(gc['logfile']) >= 6553600:
+        ts = dt.now().strftime('%Y:%m:%d+%H:%M:%S:%f')
+        rename(gc['logfile'], gc['logfile'] + '.' + ts)
+        f = open(gc['logfile'], 'w')
+        f.write('Rotated logs to file ' + gc['logfile'] + '.' + ts + '\n')
+        f.close()
+    # logger
+    f = open(gc['logfile'], 'a')
+    log_msg = dt.now().strftime('%Y/%m/%d %H:%M:%S:%f :: ') + code + ' :: ' + msg + ' [' + err + ']\n'
+    f.write(log_msg)
+    f.close()
+
+def check_key(k):
+    if k != gc['api_key']:
+        return False
+    else:
+        return True
+
+def add(req):
+    ip = req.args.get('ip')
+    hname = req.args.get('hostname')
+    fname = req.args.get('alias')
+    try:
+        db.update_one({ 'hostname' : hname }, { '$set' : { 'ip' : ip, 'alias' : fname }}, upsert=True)
+    except Exception as e:
+        log(str(e), '999')
+        return 500
+    log('Added/updated ' + hname + ' to current config. HOSTNAME: ' + hname + '; IP: ' + ip + '; ALIAS: ' + fname, '200')
+    return 200
+
+def remove(req):
+    hname = req.args.get('hostname')
+    try:
+        db.delete_one({ 'hostname' : hname })
+    except Exception as e:
+        log(str(e), '999')
+        return 404
+    log('Removed ' + hname + ' from current config.', '201')
+    return 200
+
+def update_hosts():
+    shutil.copy(gc['hosts_file'], gc['hosts_file'] + ts())
+    f = open(gc['templates'], 'r')
+    templates = f.readlines()
+    f.close()
+    f = open(gc['hosts_file'], 'w')
+    for i in templates:
+        f.write(i)
+    f.write('\n#### THIS FILE IS MANAGED BY NHRA, PLEASE UPDATE THE CONFIG THROUGH THAT UTILITY ####\n\n')
+    servers = db.find(projection={'_id' : False})
+    for i in servers:
+        t = """define host {
+use                 linux-generic
+host_name           %s
+alias               %s
+address             %s
+}
+""" % (i['hostname'], i['alias'], i['ip'])
+        f.write(t)
+    f.close()
+    log('Updated the nagios hosts file with 'str(servers.count()) + ' hosts.', '200')
+    sub.call('systemctl restart nagios', shell=True)
+    sub.call('systemctl restart httpd', shell=True)
+    return
+
+##################################################################################### ROUTES
+@app.route('/add')
+def route_add():
+    if check_key(request.args.get('key')) == False:
+        return 401
+    else:
+        res = add(request)
+        update_hosts()
+        return str(res)
+
+@app.route('/remove')
+def route_remove():
+    if check_key(request.args.get('key')) == False:
+        return 401
+    else:
+        res = remove(request)
+        update_hosts()
+        return str(res)
+
+if __name__ == '__main__':
+    load_config(gc)
+    if firstrun() == True:
+        load_config(gc) ### if firstrun, reload config
+    db_setup()
+    app.debug = True
+    log('Starting up Nagios Host RESTful API (NHRA)...', '003')
+    app.run(host='0.0.0.0', port=5000)
