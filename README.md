@@ -68,5 +68,5 @@ None?
 
 ### Acknowledgements
 `NHRA` uses some pretty cool open-source software:
-* `pymongo` [Apache](http://choosealicense.com/licenses/apache-2.0/) -- https://github.com/mongodb/mongo-python-driver
-* `flask` [BSD](http://choosealicense.com/licenses/isc/) -- http://flask.pocoo.org/
+* `pymongo` ([Apache](http://choosealicense.com/licenses/apache-2.0/)) -- https://github.com/mongodb/mongo-python-driver
+* `flask` ([BSD](http://choosealicense.com/licenses/isc/)) -- http://flask.pocoo.org/
