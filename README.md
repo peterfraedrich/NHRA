@@ -26,13 +26,20 @@ key=<key>                   // your API key, an 8-character string
 hostname=<hostname>         // the FQDN of the host you are adding. this is the database key so it must be unique.
 ip=<ip_address>             // IP address of the host you are adding
 alias=<alias>               // the friendly name of the host. Nagios uses this, IDGAF what you put as long as its a string. 
+group=<hostgroup>           // the hostgroup the new host belongs to
+refresh                     // automatically refreshes the hosts.cfg file when the operation is done
+list=<list>                 // a list of hosts to remove
 ```
 
-As of right now there are only 2 API hooks:
+As of right now there are only 5 API hooks:
 ```c++
 /add                        // adds a host to the config
 /remove                     // removes a host from the config
+/remove-many                // removes a comma-delimeated list of hosts
 /refresh                    // manually dumps the database to the hosts.cfg file
+/debug/config               // dumps the nhra.conf file to the requester
+/debug/hosts                // dumps the hosts.cfg file to the requester
+/debug/hostdb               // dumps the hosts in the DB to the requester
 ```
 
 ### API Key
@@ -63,6 +70,17 @@ Command:
 $> curl http://nagios.hexapp.net:5000/add?key=abcd1234&hostname=oldDB.hexapp.net
 200
 ```
+
+To remove a list of hosts:
+```bash
+Servers to remove:          host1, host2, host3
+API key:                    abcd1234
+
+Command:
+$> curl http://nagios.hexapp.net:5000/remove-many?key=abcd1234&list=host1,host2,host3
+200
+```
+
 
 ### Known Bugs
 None?

@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+##################################################################################### IMPORTS
 from os import path
 from os import rename
 from datetime import datetime as dt
@@ -8,14 +9,19 @@ import json
 from pymongo import MongoClient
 import ConfigParser
 import argparse
+import flask
 from flask import Flask
 from flask import request
 import uuid
 import subprocess as sub
 import shutil
+from bson.json_util import dumps
 
+##################################################################################### GLOBALS
 app = Flask(__name__)
 gc = {}
+
+##################################################################################### LOGIC
 
 def ts():
     return dt.now().strftime('%Y%m%d%H%M%S%f')
@@ -92,12 +98,13 @@ def add(req):
     ip = req.args.get('ip')
     hname = req.args.get('hostname')
     fname = req.args.get('alias')
+    group = req.args.get('group')
     try:
-        db.update_one({ 'hostname' : hname }, { '$set' : { 'ip' : ip, 'alias' : fname }}, upsert=True)
+        db.update_one({ 'hostname' : hname }, { '$set' : { 'ip' : ip, 'alias' : fname, 'group' : group }}, upsert=True)
     except Exception as e:
         log(str(e), '999')
         return 500
-    log('Added/updated ' + hname + ' to current config. HOSTNAME: ' + hname + '; IP: ' + ip + '; ALIAS: ' + fname, '200')
+    log('Added/updated ' + hname + ' to current config. HOSTNAME: ' + hname + '; IP: ' + ip + '; ALIAS: ' + fname + '; GROUP: ' + group, '200')
     return 200
 
 def remove(req):
@@ -109,6 +116,24 @@ def remove(req):
         return 404
     log('Removed ' + hname + ' from current config.', '201')
     return 200
+
+def remove_many(req):
+    err = []
+    hnames = req.args.get('list')
+    hlist = hnames.split(',')
+    for i in hlist:
+        try:
+            db.delete_one({ 'hostname' : i })
+        except Exception as e:
+            log(str(e), '999')
+            err.append(i)
+            continue
+    if len(err) != 0:
+        log('Error removing hosts ' + str(err), '999')
+        return 404
+    else:
+        log('Removed ' + str(hlist) + ' from current config.', '201')
+        return 200
 
 def update_hosts():
     shutil.copy(gc['hosts_file'], gc['hosts_file'] + ts())
@@ -124,16 +149,42 @@ def update_hosts():
         t = """define host {
 use                 linux-generic
 host_name           %s
+hostgroups          %s
 alias               %s
 address             %s
 }
-""" % (i['hostname'], i['alias'], i['ip'])
+""" % (i['hostname'], i['group'], i['alias'], i['ip'])
         f.write(t)
     f.close()
     log('Updated the nagios hosts file with ' + str(servers.count()) + ' hosts.', '200')
     sub.call('systemctl restart nagios', shell=True)
     sub.call('systemctl restart httpd', shell=True)
     return
+
+## DEBUG
+
+def debug_config():
+    log('Dumped config to requester.', '300')
+    return gc
+
+def debug_hosts():
+    log('Dumped hosts to requester.', '300')
+    f = open(gc['hosts_file'], 'r')
+    l = f.readlines()
+    document = '<html><style>*{font-family:Arial,Helvetica,sans-serif}</style><body><p>'
+    for i in l:
+        document = document + i.strip('\n') + '<br>'
+    document = document + '</p></body></html>'
+    return document
+
+def debug_hostdb():
+    log('Dumped hosts to the requester.', '300')
+    try:
+        hosts = db.find(projection={'_id' : False})
+    except Exception as e:
+        log(str(e), '999')
+        return 404
+    return dumps(hosts)
 
 ##################################################################################### ROUTES
 @app.route('/add')
@@ -142,7 +193,8 @@ def route_add():
         return str(401)
     else:
         res = add(request)
-        update_hosts()
+        if request.args.get('refresh') != None:
+            update_hosts()
         return str(res)
 
 @app.route('/remove')
@@ -151,7 +203,18 @@ def route_remove():
         return str(401)
     else:
         res = remove(request)
-        update_hosts()
+        if request.args.get('refresh') != None:
+            update_hosts()
+        return str(res)
+
+@app.route('/remove-many')
+def route_remove_many():
+    if check_key(request.args.get('key')) == False:
+        return str(401)
+    else:
+        res = remove_many(request)
+        if request.args.get('refresh') != None:
+            update_hosts()
         return str(res)
 
 @app.route('/refresh')
@@ -162,11 +225,36 @@ def route_refresh():
         update_hosts()
         return str(200)
 
+@app.route('/debug/config')
+def route_debug_config():
+    if check_key(request.args.get('key')) == False:
+        return str(401)
+    else:
+        res = debug_config()
+        return flask.jsonify(res)
+
+@app.route('/debug/hosts')
+def route_debug_hosts():
+    if check_key(request.args.get('key')) == False:
+        return str(401)
+    else:
+        res = debug_hosts()
+        return str(res)
+
+@app.route('/debug/hostdb')
+def route_debug_hostdb():
+    if check_key(request.args.get('key')) == False:
+        return str(401)
+    else:
+        res = debug_hostdb()
+        return res
+
+##################################################################################### MAIN
 if __name__ == '__main__':
     load_config(gc)
     if firstrun() == True:
         load_config(gc) ### if firstrun, reload config
     db_setup()
-    app.debug = False
+    app.debug = True
     log('Starting up Nagios Host RESTful API (NHRA)...', '003')
     app.run(host='0.0.0.0', port=5000)
